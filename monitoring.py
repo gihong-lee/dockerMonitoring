@@ -49,7 +49,7 @@ class monitoring:
 
     return CpuUsage
 
-  def info(self) -> dict:
+  def getInfo(self) -> dict:
     ContainerInfo = {}
 
     bfPkt = self.getPktInfo()
@@ -71,14 +71,14 @@ class monitoring:
       ContainerInfo[containerId] = {
         "name" : self.containers[containerId]['name'],
         "packet" : pktSub,
-        "memory" : memUsage,
+        "memory" : memUsage[containerId],
         "cpu" : cpuSub
       }
     
     return ContainerInfo
 
   def print(self):
-    ContainerInfo = self.info()
+    ContainerInfo = self.getInfo()
 
     NLnum = 3
 
@@ -105,7 +105,7 @@ class monitoring:
       else:
         print("\t",end='')
 
-      print(f"{round(ContainerInfo[containerId]['memory'][containerId]/1000000,2)}\tMiB\t\t",end='')
+      print(f"{round(ContainerInfo[containerId]['memory']/1000000,2)}\tMiB\t\t",end='')
 
       for core in ContainerInfo[containerId]['cpu']:
         print(core ,end='\t')
