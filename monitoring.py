@@ -1,6 +1,8 @@
 import os
 import time
 from typing import Container
+import datetime
+
 
 class monitoring:
   def __init__(self):
@@ -67,7 +69,7 @@ class monitoring:
         pktSub.append(afPkt[containerId][i] -  bfPkt[containerId][i])
       for i in range(len(afcpuUsage[containerId])):
         cpuSub.append(afcpuUsage[containerId][i]-bfcpuUsage[containerId][i])
-
+      
       ContainerInfo[containerId] = {
         "name" : self.containers[containerId]['name'],
         "packet" : pktSub,
@@ -77,50 +79,55 @@ class monitoring:
     
     return ContainerInfo
 
-  def print(self):
+  def getMSG(self) -> str:
     ContainerInfo = self.getInfo()
 
     NLnum = 3
+    msg = ''
 
     for i in range(NLnum):
-      print("")
+      msg = msg + "\n"
 
-    print (f"container ID\tName\t\t\t\t\tPacket\t\tMemory Usage\t\tCPU usage")
+    msg = msg + f"container ID\tName\t\t\t\t\tPacket\t\tMemory Usage\t\tCPU usage\n"
 
     for containerId in self.containers.keys():
       pkmsg = f"{ContainerInfo[containerId]['packet'][0]} --> {ContainerInfo[containerId]['packet'][2]}"
-      containerName = ContainerInfo[containerId]['name']
+      containerName = ContainerInfo[containerId]['name'][:35]
 
-      print(f'{containerId}\t{containerName}',end="")
+      msg = msg + f'{containerId}\t{containerName}'
 
       if(len(containerName) < 32):
-        print("\t\t",end='')
+        msg = msg + "\t\t"
       else:
-        print("\t",end='')
+        msg = msg + "\t"
 
-      print(pkmsg,end="")
+      msg = msg + pkmsg
 
       if(len(pkmsg) < 8):
-        print("\t\t",end='')
+        msg = msg + "\t\t"
       else:
-        print("\t",end='')
+        msg = msg + "\t"
 
-      print(f"{round(ContainerInfo[containerId]['memory']/1000000,2)}\tMiB\t\t",end='')
+      msg = msg + f"{round(ContainerInfo[containerId]['memory']/1000000,2)}\tMiB\t\t"
 
       for core in ContainerInfo[containerId]['cpu']:
-        print(core ,end='\t')
-
-      print("")
+        msg = msg + str(core) +'\t'
+      msg = msg + '\n'
 
     for i in range(54-NLnum-len(ContainerInfo.keys())):
-      print("")
+      msg = msg + '\n'
+    
+    return msg 
 
-  def monitorStart(self):
+  def monitorPrint(self):
     while(1):
-      self.print()
+      msg = self.getMSG()
+      print(msg)
+
+
 
 
 if __name__ == "__main__":
   m = monitoring()
-  m.monitorStart()
-  # m.getMemUsage()
+  m.monitorPrint()
+

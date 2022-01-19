@@ -10,7 +10,7 @@ do
   for DOCKER in $DOCKERS
   do
     # PEER_IF=`docker exec $DOCKER ip link list 2>/dev/null | grep "^$PEER_IFINDEX:" | awk '{print $2}' | sed 's/:.*//g'`
-    IF=`docker exec $DOCKER /bin/cat /sys/class/net/eth0/iflink`
+    IF=`docker exec $DOCKER /bin/cat /sys/class/net/eth1/iflink`
     
     if [ $IF = $IFINDEX ]; then
       echo "$DOCKER : $VETH" >> ~/monitoring/vethInfo
