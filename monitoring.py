@@ -12,15 +12,24 @@ class monitoring:
 
     for dockerId in dockerIds:
       ctName = os.popen("docker ps --format='{{.ID}} {{.Names}}'| grep %(id)s | awk '{print $2}'"%{"id":dockerId}).read().rstrip()
-      veth = os.popen("cat ~/monitoring/vethInfo | grep %(id)s | awk '{print $3}'"%{"id":dockerId}).read().rstrip()
+      task = os.popen(f'cat /sys/fs/cgroup/devices/docker/{dockerId}*/tasks').read().split()[0]
+      os.system('mkdir -p /var/run/netns')
+      os.system(f'ln -sf /proc/{task}/ns/net /var/run/netns/{dockerId}')
 
-      self.containers[dockerId] = {"name":ctName, "veth": veth}
+      self.containers[dockerId] = {"name":ctName, "task": task}
 
   def getPktInfo(self) -> dict:
     PktInfo = {}
 
-    for dockerId in self.containers.keys():
-      rtx = list(map(int, os.popen("""ifconfig %(veth)s | awk '{print $3 "\t" $5}'| sed -n -e '4p' -e '6p'"""%{"veth":self.containers[dockerId]["veth"]}).read().replace("\t","\n").split("\n")[:-1]))
+    for dockerId,items in self.containers.items():
+      rtx = [0, 0]
+      data = list(map(int,os.popen("""ip netns exec %(dockerId)s netstat -in | grep -P "eth|lo" | awk '{print $3 "\t" $7}'"""%{"dockerId":dockerId}).read().split()))
+
+      for i in range(len(data)):
+        if i%2 == 0:
+          rtx[0] += data[i]
+        else:
+          rtx[1] += data[i]
       
       PktInfo[dockerId] = rtx
 
@@ -30,9 +39,8 @@ class monitoring:
     Usage = {}
     basePath = "/sys/fs/cgroup/memory/docker"
 
-    for dockerId in self.containers.keys():
-      fullId = os.popen(f"cd {basePath} && ls | grep {dockerId}").read().rstrip()
-      perUsage = list(map(int,os.popen("cat %(basePath)s/%(fullId)s/memory.stat | sed -n -e '20p' -e '21p' | awk '{print $2}'"%{"basePath" : basePath, "fullId": fullId}).read().split("\n")[:-1]))
+    for dockerId in self.containers:
+      perUsage = list(map(int,os.popen("cat %(basePath)s/%(dockerId)s*/memory.stat | sed -n -e '20p' -e '21p' | awk '{print $2}'"%{"basePath" : basePath, "dockerId": dockerId}).read().split("\n")[:-1]))
       
       Usage[dockerId] = perUsage[0] + perUsage[1]
 
@@ -43,9 +51,8 @@ class monitoring:
     CpuUsage = {}
     basePath = "/sys/fs/cgroup/cpu,cpuacct/docker"
 
-    for dockerId in self.containers.keys():
-      fullId = os.popen(f"cd {basePath} && ls | grep {dockerId}").read().rstrip()
-      perUsage = list(map(int, os.popen(f"cat {basePath}/{fullId}/cpuacct.usage_percpu").read().rstrip().split(" ")))
+    for dockerId in self.containers:
+      perUsage = list(map(int, os.popen(f"cat {basePath}/{dockerId}*/cpuacct.usage_percpu").read().rstrip().split(" ")))
 
       CpuUsage[dockerId] = perUsage
 
@@ -61,7 +68,7 @@ class monitoring:
     afPkt = self.getPktInfo()
     afcpuUsage = self.getCpuUsage()
 
-    for containerId in self.containers.keys():
+    for containerId, items in self.containers.items():
       pktSub = []
       cpuSub = []
 
@@ -71,7 +78,7 @@ class monitoring:
         cpuSub.append(afcpuUsage[containerId][i]-bfcpuUsage[containerId][i])
       
       ContainerInfo[containerId] = {
-        "name" : self.containers[containerId]['name'],
+        "name" : items['name'],
         "packet" : pktSub,
         "memory" : memUsage[containerId],
         "cpu" : cpuSub
@@ -88,10 +95,8 @@ class monitoring:
     for i in range(NLnum):
       msg = msg + "\n"
 
-    msg = msg + f"container ID\tName\t\t\t\t\tPacket\t\tMemory Usage\t\tCPU usage\n"
-
-    for containerId in self.containers.keys():
-      pkmsg = f"{ContainerInfo[containerId]['packet'][0]} --> {ContainerInfo[containerId]['packet'][2]}"
+    for containerId in self.containers:
+      pkmsg = f"{ContainerInfo[containerId]['packet'][0]} --> {ContainerInfo[containerId]['packet'][1]}"
       containerName = ContainerInfo[containerId]['name'][:35]
 
       msg = msg + f'{containerId}\t{containerName}'
@@ -120,10 +125,15 @@ class monitoring:
     return msg 
 
   def monitorPrint(self):
+    d = datetime.datetime.now()
+
     while(1):
       msg = self.getMSG()
-      print(msg)
-
+      # print("container ID\tName\t\t\t\t\tPacket\t\tMemory Usage\t\tCPU usage")
+      # print(msg)
+      f = open(f"/home/gh/exp_result/exp_redis/monitor_{d.year}_{d.month}_{d.day}",'a')
+      f.write(msg.rstrip('\n'))
+      f.close()
 
 
 
