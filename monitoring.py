@@ -5,8 +5,9 @@ import datetime
 
 
 class monitoring:
-  def __init__(self):
+  def __init__(self,samplingPeriod = 1):
     self.containers = {}
+    self.samplingPeriod = samplingPeriod #second
 
     dockerIds = os.popen("docker ps -a | grep Up | awk '{print $1}'").read().split("\n")[:-1]
 
@@ -16,7 +17,14 @@ class monitoring:
       os.system('mkdir -p /var/run/netns')
       os.system(f'ln -sf /proc/{task}/ns/net /var/run/netns/{dockerId}')
 
-      self.containers[dockerId] = {"name":ctName, "task": task}
+      self.containers[dockerId] = {
+        "name":ctName, 
+        "task": task}
+
+      self.bfinfo = {
+      'packet': self.getPktInfo(),
+      'cpu' : self.getCpuUsage(),
+      'time' : time.time()}
 
   def getPktInfo(self) -> dict:
     PktInfo = {}
@@ -61,21 +69,18 @@ class monitoring:
   def getInfo(self) -> dict:
     ContainerInfo = {}
 
-    bfPkt = self.getPktInfo()
-    memUsage = self.getMemUsage()
-    bfcpuUsage = self.getCpuUsage()
-    time.sleep(1)
     afPkt = self.getPktInfo()
     afcpuUsage = self.getCpuUsage()
+    memUsage = self.getMemUsage()
 
     for containerId, items in self.containers.items():
       pktSub = []
       cpuSub = []
 
       for i in range(len(afPkt[containerId])):
-        pktSub.append(afPkt[containerId][i] -  bfPkt[containerId][i])
+        pktSub.append(afPkt[containerId][i] -  self.bfinfo['packet'][containerId][i])
       for i in range(len(afcpuUsage[containerId])):
-        cpuSub.append(afcpuUsage[containerId][i]-bfcpuUsage[containerId][i])
+        cpuSub.append(afcpuUsage[containerId][i] - self.bfinfo['cpu'][containerId][i])
       
       ContainerInfo[containerId] = {
         "name" : items['name'],
@@ -83,17 +88,16 @@ class monitoring:
         "memory" : memUsage[containerId],
         "cpu" : cpuSub
       }
-    
+
+    #정보 갱신
+    self.bfinfo['packet'] = afPkt
+    self.bfinfo['cpu'] = afcpuUsage
+  
     return ContainerInfo
 
   def getMSG(self) -> str:
     ContainerInfo = self.getInfo()
-
-    NLnum = 3
     msg = ''
-
-    for i in range(NLnum):
-      msg = msg + "\n"
 
     for containerId in self.containers:
       pkmsg = f"{ContainerInfo[containerId]['packet'][0]} --> {ContainerInfo[containerId]['packet'][1]}"
@@ -119,25 +123,34 @@ class monitoring:
         msg = msg + str(core) +'\t'
       msg = msg + '\n'
 
-    for i in range(54-NLnum-len(ContainerInfo.keys())):
+    for i in range(50-len(ContainerInfo.keys())):
       msg = msg + '\n'
     
     return msg 
 
   def monitorPrint(self):
-    d = datetime.datetime.now()
-
     while(1):
-      msg = self.getMSG()
-      # print("container ID\tName\t\t\t\t\tPacket\t\tMemory Usage\t\tCPU usage")
-      # print(msg)
-      f = open(f"/home/gh/exp_result/exp_redis/monitor_{d.year}_{d.month}_{d.day}",'a')
-      f.write(msg.rstrip('\n'))
-      f.close()
+      bftime = self.bfinfo['time']
+      nowtime = time.time()
 
+      if(self.samplingPeriod+bftime > nowtime):
+        time.sleep(self.samplingPeriod+bftime-nowtime)
+        continue
+        
+      msg = self.getMSG()
+      print("container ID\tName\t\t\t\t\tPacket\t\tMemory Usage\t\tCPU usage\t")
+      print(msg)
+      self.saveLogs(msg)
+      self.bfinfo['time'] = nowtime
+
+  def saveLogs(self,log):
+    d = datetime.datetime.now()
+    f = open(f"/home/gh/exp_result/exp_redis/monitor_{d.year}_{d.month}_{d.day}",'a')
+    f.write(log.rstrip('\n'))
+    f.close()
 
 
 if __name__ == "__main__":
-  m = monitoring()
+  m = monitoring(1)
   m.monitorPrint()
 
